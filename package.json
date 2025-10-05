@@ -1,17 +1,9 @@
 {
-  "name": "GdevelopServer",
+  "name": "socket-server-example",
   "version": "0.0.1",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-  "test": "echo \"No tests yet\""
-},
-  "keywords": [],
-  "author": "sweko",
-  "license": "MIT",
-  "dependencies": {
-    "@types/node": "^22.13.11",
-    "express": "^5.1.0",
+  "description": "My first Gdevelop 5 server",
+  "type": "commonjs",
+  "dependencies": { 
     "socket.io": "^4.8.1"
   }
 }
