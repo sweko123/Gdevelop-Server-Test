@@ -1,27 +1,105 @@
-
-const express = require("express");
-const http = require("http");
+// server.js
+const { createServer } = require("node:http");
 const { Server } = require("socket.io");
 
-const app = express();
-const server = http.createServer(app);
+const current = { players: {}, /* optional: idCounter: 0 */ };
+
+// Create a plain HTTP server (no HTML)
+const server = createServer();
+
+// Initialize Socket.IO server
 const io = new Server(server, {
-  cors: { origin: "*" }
+    cors: {
+        origin: "http://localhost:3000", // change to your client origin in prod
+        methods: ["GET", "POST"]
+    }
 });
 
+// Handle client connections
 io.on("connection", (socket) => {
-  console.log("User connected:", socket.id);
+    console.log("User connected:", socket.id);
 
-  socket.on("playerMove", (data) => {
-    socket.broadcast.emit("playerMove", { id: socket.id, ...data });
-  });
+    // Assign unique player ID based on current players
+    const playerId = "P" + (Object.keys(current.players).length + 1);
 
-  socket.on("disconnect", () => {
-    console.log("User disconnected:", socket.id);
-  });
+    current.players[socket.id] = {
+        id: playerId,
+        name: "Player " + playerId,
+        x: 100,
+        y: 100,
+        health: 100,
+        score: 0,
+        stamina: 100,
+        ammo: 10,
+        animation: "Idle"
+    };
+
+    current.maxValues = {
+        score: 999,
+        health: 100,
+        stamina: 100,
+        ammo: 10
+    };
+
+    current.minValues = {
+        score: 0,
+        health: 0,
+        stamina: 0,
+        ammo: 0
+    };
+
+    // Send setup info to this client only
+    //socket.emit("setupinfo", current.players[socket.id]);
+
+    // Notify everyone that a player joined, and send the full list to the newcomer
+    io.emit("playerJoined", current.players[socket.id]);
+    socket.emit("playersList", Object.values(current.players));
+
+    console.log("Current players:", current.players);
+
+    // Handle explicit client request for setup (client emits request_setup)
+    socket.on("request_setup", () => {
+        if (current.players[socket.id]) {
+            socket.emit("setupinfo", current.players[socket.id]);
+            socket.emit("maxValues", current.maxValues);
+            socket.emit("minValues", current.minValues);
+            socket.emit("playersList", Object.values(current.players));
+            console.log("Sent setup info to", socket.id);
+        }
+    });
+
+    // Listen for chat messages from client
+    socket.on("chatMessage", (msg) => {
+        console.log("Received from client:", msg);
+        // Attach authoritative sender id and text before broadcasting
+        const fromId = current.players[socket.id] ? current.players[socket.id].id : socket.id;
+        io.emit("chatMessage", { from: fromId, text: msg });
+    });
+
+    // Optional: handle state updates and broadcast to others
+    socket.on("updateState", (payload) => {
+        const p = current.players[socket.id];
+        if (p && payload && typeof payload === "object") {
+            // Basic merge; consider validation / rate-limiting in production
+            Object.assign(p, payload);
+            socket.broadcast.emit("playerState", { id: p.id, state: payload });
+            console.log(payload);
+        }
+    });
+
+    // Handle disconnect
+    socket.on("disconnect", (reason) => {
+        const left = current.players[socket.id];
+        console.log("User disconnected:", socket.id, reason);
+        if (left) {
+            // notify clients who left
+            io.emit("playerLeft", { id: left.id });
+            delete current.players[socket.id];
+        }
+    });
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+// Start server
+server.listen(3000, () => {
+    console.log("Socket.IO server running on port 3000");
 });
